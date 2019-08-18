@@ -234,24 +234,33 @@ def export_table(db, table, directory, options, error_queue, progress_info, sind
 
     writer = None
 
+    run_options = {
+        'binary_format': 'raw'
+    }
+
+    if options.outdated:
+        run_options["read_mode"] = "outdated"
+
     try:
         # -- get table info
 
-        table_info = options.retryQuery('table info: %s.%s' % (db, table), query.db(db).table(table).info())
+        table_info = options.retryQuery(
+            'table info: %s.%s' % (db, table),
+            query.db(db).table(table).info(),
+            run_options=run_options)
 
         # Rather than just the index names, store all index information
         table_info['indexes'] = options.retryQuery(
             'table index data %s.%s' % (db, table),
             query.db(db).table(table).index_status(),
-            run_options={'binary_format': 'raw'}
-        )
+            run_options=run_options)
 
         sindex_counter.value += len(table_info["indexes"])
 
         table_info['write_hook'] = options.retryQuery(
             'table write hook data %s.%s' % (db, table),
             query.db(db).table(table).get_write_hook(),
-            run_options={'binary_format': 'raw'})
+            run_options=run_options)
 
         if table_info['write_hook'] is not None:
             hook_counter.value += 1
@@ -409,12 +418,18 @@ def run_clients(options, workingDir, db_table_set):
     signal.signal(signal.SIGINT, lambda a, b: abort_export(a, b, exit_event, interrupt_event))
     errors = []
 
+    run_options = {}
+    if options.outdated:
+        run_options['read_mode'] = 'outdated'
+
     try:
         progress_info = []
         arg_lists = []
         for db, table in db_table_set:
 
-            tableSize = int(options.retryQuery("count", query.db(db).table(table).info()['doc_count_estimates'].sum()))
+            tableSize = int(options.retryQuery("count",
+                                               query.db(db).table(table).info()['doc_count_estimates'].sum(),
+                                               run_options=run_options))
 
             progress_info.append((multiprocessing.Value(ctypes.c_longlong, 0),
                                   multiprocessing.Value(ctypes.c_longlong, tableSize)))
@@ -481,14 +496,20 @@ def run(options):
     # if the user has a database named 'rethinkdb'
     utils_common.check_minimum_version(options, '1.6')
 
+    run_options = {}
+    if options.outdated:
+        run_options['read_mode'] = 'outdated'
+
     # get the complete list of tables
     db_table_set = set()
     all_tables = [utils_common.DbTable(x['db'], x['name']) for x in options.retryQuery(
-        'list tables', query.db('rethinkdb').table('table_config').pluck(['db', 'name']))]
+        'list tables', query.db('rethinkdb').table('table_config').pluck(['db', 'name']),
+        run_options=run_options)]
     if not options.db_tables:
         db_table_set = all_tables  # default to all tables
     else:
-        all_databases = options.retryQuery('list dbs', query.db_list().filter(query.row.ne('rethinkdb')))
+        all_databases = options.retryQuery('list dbs', query.db_list().filter(query.row.ne('rethinkdb')),
+                                           run_options=run_options)
         for db_table in options.db_tables:
             db, table = db_table
 
