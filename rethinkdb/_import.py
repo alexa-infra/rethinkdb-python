@@ -339,12 +339,17 @@ class SourceFile(object):
 
         # - yield batches
 
+        eof = False
         batch = []
         try:
             need_more_data = False
             while True:
                 if need_more_data:
-                    self.fill_buffer()
+                    try:
+                        self.fill_buffer()
+                    except StopIteration:
+                        eof = True
+                        raise
                     need_more_data = False
 
                 while len(batch) < batch_size:
@@ -373,7 +378,8 @@ class SourceFile(object):
                 self.restore_indexes(warning_queue)
 
             # -
-            raise e
+            if not eof:
+                raise e
 
     def setup_file(self, warning_queue=None):
         raise NotImplementedError("Subclasses need to implement this")
